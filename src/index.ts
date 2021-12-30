@@ -78,7 +78,9 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
           selfId,
           peerIds: room.players.filter((p) => p.id !== selfId).map((p) => p.id),
           playerNames,
+          minPlayers: playerCount[room.game][0],
         });
+        player.data.room = gameRoomName;
       }
       console.log(`${gameRoomName} ${room.players.length}`);
     }
@@ -87,9 +89,9 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
   io.on("connection", (socket) => {
     console.log("New connection", socket.id);
     socket.on("disconnect", (reason) => {
-      console.log("Disconnected", socket.id, reason);
-      for (const room of socket.rooms) {
-        io.in(room).emit("user:leave", socket.id);
+      console.log("Disconnected", socket.id, reason, socket.data);
+      if (socket.data.room) {
+        socket.broadcast.to(socket.data.room).emit("user:leave", socket.id);
       }
     });
 
@@ -114,7 +116,15 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
 
     socket.on("user:leave", (room) => {
       socket.leave(room);
-      io.in(room).emit("user:leave", socket.id);
+      socket.broadcast.in(room).emit("user:leave", socket.id);
+    });
+
+    socket.on("user:message:send", ({ room, message }) => {
+      socket.broadcast.in(room).emit("user:message:send", {
+        id: socket.id,
+        message,
+        timestamp: +new Date(),
+      });
     });
   });
 
