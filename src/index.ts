@@ -128,5 +128,5 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
     });
   });
 
-  console.log(`Listening on port ${port}`);
+  console.log(`Listening on port ${port}.`);
 });
