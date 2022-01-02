@@ -102,18 +102,6 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
       connectPlayers(lang);
     });
 
-    socket.on("user:rtc:offer", ({ id, offer }) => {
-      io.to(id).emit("user:rtc:offer", { id: socket.id, offer });
-    });
-
-    socket.on("user:rtc:answer", ({ id, answer }) => {
-      io.to(id).emit("user:rtc:answer", { id: socket.id, answer });
-    });
-
-    socket.on("user:rtc:candidate", ({ id, candidate }) => {
-      io.to(id).emit("user:rtc:candidate", { id: socket.id, candidate });
-    });
-
     socket.on("user:leave", (room) => {
       socket.leave(room);
       socket.broadcast.in(room).emit("user:leave", socket.id);
