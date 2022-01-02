@@ -105,6 +105,7 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
     socket.on("user:leave", (room) => {
       socket.leave(room);
       socket.broadcast.in(room).emit("user:leave", socket.id);
+      console.log("user:leave", room, socket.id);
     });
 
     socket.on("user:message:send", ({ room, message }) => {
@@ -113,6 +114,7 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
         message,
         timestamp: +new Date(),
       });
+      console.log("user:message:send", room, message);
     });
   });
 
