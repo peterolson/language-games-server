@@ -26,40 +26,19 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
   async function connectPlayers(lang: string) {
     const roomName = `waiting-${lang}`;
     const players = await io.in(roomName).fetchSockets();
-    const matchedIds = new Set<string>();
-    const byGame: Record<string, RemoteSocket<DefaultEventsMap>[]> = {};
-    for (const player of players) {
-      const games = player.data.criteria.games;
-      for (const game of games) {
-        if (!byGame[game]) {
-          byGame[game] = [];
-        }
-        byGame[game].push(player);
-      }
-    }
-    const games = shuffle(Object.keys(byGame));
+
     const newRooms: {
       game: string;
       players: RemoteSocket<DefaultEventsMap>[];
     }[] = [];
-    for (const game of games) {
-      const [min, max] = playerCount[game];
-      const players = byGame[game].filter(
-        (player) => !matchedIds.has(player.id)
-      );
-      if (players.length < min) continue;
-      let i = 0;
-      while (i < players.length) {
-        const count = Math.min(max, players.length - i);
-        if (count < min) {
-          break;
-        }
-        const room = { game, players: players.slice(i, i + count) };
-        newRooms.push(room);
-        room.players.forEach((player) => matchedIds.add(player.id));
-        i += count;
-      }
+
+    for (let i = 0; i + 1 < players.length; i += 2) {
+      newRooms.push({
+        game: "chat",
+        players: [players[i], players[i + 1]],
+      });
     }
+
     for (const room of newRooms) {
       const gameRoomName = `${lang}|${room.game}|${guid()}`;
       const playerNames: Record<string, string> = {};
@@ -95,8 +74,7 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
       }
     });
 
-    socket.on("playqueue.add", async ({ lang, games, name }) => {
-      socket.data.criteria = { games };
+    socket.on("playqueue.add", async ({ lang, name }) => {
       socket.data.name = name;
       socket.join(`waiting-${lang}`);
       connectPlayers(lang);
