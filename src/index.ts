@@ -2,8 +2,7 @@ import { RemoteSocket, Server } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
 import { DefaultEventsMap } from "socket.io/dist/typed-events";
-import { guid, shuffle } from "./util";
-import { playerCount } from "./gameinfo";
+import { guid } from "./util";
 
 const io = new Server();
 const port = +process.env.PORT || 3004;
@@ -57,7 +56,6 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
           selfId,
           peerIds: room.players.filter((p) => p.id !== selfId).map((p) => p.id),
           playerNames,
-          minPlayers: playerCount[room.game][0],
         });
         player.data.room = gameRoomName;
       }
