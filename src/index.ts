@@ -92,7 +92,6 @@ Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
         message,
         timestamp: +new Date(),
       });
-      console.log("user:message:send", room, message);
     });
   });
 
