@@ -27,3 +27,16 @@ export function guid() {
     )
   );
 }
+
+const firstSymbol = "0123456789ABCEFGHJKLMNPQRSTUWXYZ";
+const symbols = "0123456789ABCEFGHJKLMNPQRSTUVWXYZ";
+export function shortCode(useVideo: boolean) {
+  let code = firstSymbol[Math.floor(Math.random() * firstSymbol.length)];
+  if (useVideo) {
+    code = "V";
+  }
+  for (let i = 0; i < 5; i++) {
+    code += symbols[Math.floor(Math.random() * symbols.length)];
+  }
+  return code;
+}

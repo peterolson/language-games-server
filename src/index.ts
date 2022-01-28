@@ -1,8 +1,7 @@
-import { RemoteSocket, Server } from "socket.io";
+import { Server, Socket } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { createClient } from "redis";
-import { DefaultEventsMap } from "socket.io/dist/typed-events";
-import { guid } from "./util";
+import { guid, shortCode } from "./util";
 
 const io = new Server();
 const port = +process.env.PORT || 3004;
@@ -22,66 +21,103 @@ io.adapter(createAdapter(pubClient, subClient));
 Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
   io.listen(port);
 
-  async function connectPlayers(lang: string) {
-    const roomName = `waiting-${lang}`;
-    const players = await io.in(roomName).fetchSockets();
-
-    const newRooms: {
-      game: string;
-      players: RemoteSocket<DefaultEventsMap>[];
-    }[] = [];
-
-    for (let i = 0; i + 1 < players.length; i += 2) {
-      newRooms.push({
-        game: "chat",
-        players: [players[i], players[i + 1]],
-      });
+  function joinRoom(
+    roomMap: Map<string, Set<string>>,
+    room: string,
+    socket: Socket
+  ) {
+    const players = roomMap.get(room) || new Set();
+    const peerIds = Array.from(players);
+    const playerNames = { [socket.id]: socket.data.name };
+    for (const id of peerIds) {
+      const name = io.sockets.sockets.get(id).data.name;
+      playerNames[id] = name;
     }
+    socket.join(room);
+    socket.data.room = room;
+    socket.emit("room-joined", {
+      room: room,
+      peerIds,
+      playerNames,
+      selfId: socket.id,
+    });
+    socket.broadcast.to(room).emit("player-joined", {
+      playerId: socket.id,
+      playerName: socket.data.name,
+    });
+  }
 
-    for (const room of newRooms) {
-      const gameRoomName = `${lang}|${room.game}|${guid()}`;
-      const playerNames: Record<string, string> = {};
-      for (const player of room.players) {
-        playerNames[player.id] = player.data.name;
+  function searchRooms(
+    socket: Socket,
+    lang: string,
+    isPublic: boolean,
+    room: string,
+    useVideo: boolean
+  ) {
+    const roomMap = io.sockets.adapter.rooms;
+    if (room) {
+      const players = roomMap.get(room) || new Set();
+      const size = players.size;
+      if (useVideo && size > 1) {
+        socket.emit("room-full", room);
+        return;
       }
-      for (const player of room.players) {
-        player.leave(roomName);
-        player.join(gameRoomName);
-        let selfId = player.id;
-
-        player.emit("game-joined", {
-          game: room.game,
-          room: gameRoomName,
-          playerCount: room.players.length,
-          selfId,
-          peerIds: room.players.filter((p) => p.id !== selfId).map((p) => p.id),
-          playerNames,
-        });
-        player.data.room = gameRoomName;
-      }
-      console.log(`${gameRoomName} ${room.players.length}`);
+      joinRoom(roomMap, room, socket);
+      return;
     }
+    if (isPublic) {
+      const roomsInLang = [...roomMap.keys()].filter((r) =>
+        r.startsWith(lang + "|")
+      );
+      for (const roomName of roomsInLang) {
+        const players = roomMap.get(roomName);
+        if (players.size === 1) {
+          joinRoom(roomMap, roomName, socket);
+          return;
+        }
+      }
+    }
+    const roomName = isPublic ? `${lang}|${guid()}` : shortCode(useVideo);
+    joinRoom(roomMap, roomName, socket);
   }
 
   io.on("connection", (socket) => {
-    console.log("New connection", socket.id);
     socket.on("disconnect", (reason) => {
-      console.log("Disconnected", socket.id, reason, socket.data);
       if (socket.data.room) {
-        socket.broadcast.to(socket.data.room).emit("user:leave", socket.id);
+        socket.broadcast.to(socket.data.room).emit("user:leave", {
+          id: socket.id,
+          playerIds: Array.from(
+            io.sockets.adapter.rooms.get(socket.data.room) || []
+          ),
+        });
       }
     });
 
-    socket.on("playqueue.add", async ({ lang, name }) => {
-      socket.data.name = name;
-      socket.join(`waiting-${lang}`);
-      connectPlayers(lang);
+    socket.on(
+      "playqueue.add",
+      async ({ lang, name, isPublic, room, useVideo }) => {
+        socket.data.name = name;
+        searchRooms(socket, lang, isPublic, room, useVideo);
+      }
+    );
+
+    socket.on("playqueue.remove", async () => {
+      const room = socket.data.room;
+      if (room) {
+        socket.leave(room);
+        socket.broadcast.in(room).emit("user:leave", {
+          id: socket.id,
+          playerIds: Array.from(io.sockets.adapter.rooms.get(room) || []),
+        });
+      }
     });
 
     socket.on("user:leave", (room) => {
       socket.leave(room);
-      socket.broadcast.in(room).emit("user:leave", socket.id);
-      console.log("user:leave", room, socket.id);
+      socket.broadcast.in(room).emit("user:leave", {
+        id: socket.id,
+        playerIds: Array.from(io.sockets.adapter.rooms.get(room) || []),
+      });
     });
 
     socket.on("user:message:send", ({ room, message }) => {
